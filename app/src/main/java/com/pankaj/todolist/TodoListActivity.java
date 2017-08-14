@@ -1,5 +1,7 @@
 package com.pankaj.todolist;
 
+import android.support.design.widget.CoordinatorLayout;
+import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
 import android.graphics.Rect;
 import android.os.Bundle;
@@ -10,6 +12,8 @@ import android.support.v7.widget.helper.ItemTouchHelper;
 import android.util.TypedValue;
 import android.view.View;
 
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
@@ -28,19 +32,21 @@ import java.util.List;
 /**
  * An AppCompatActivity which is being used to show TO-DO list
  * which also supports swipe to delete feature.
- *
+ * <p>
  * User can mark to-do as done, instead-of deleting a to-do.
  */
 public class TodoListActivity extends AppCompatActivity implements DeletionListener {
 
     private DatabaseReference mDbRef;
     private TodoListAdapter mAdapter;
+    private CoordinatorLayout mRootView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.todo_item_list_layout);
 
+        mRootView = (CoordinatorLayout) findViewById(R.id.root);
         mDbRef = FirebaseDatabase.getInstance().getReference();
         mAdapter = new TodoListAdapter(Collections.<TodoItem>emptyList());
 
@@ -73,7 +79,13 @@ public class TodoListActivity extends AppCompatActivity implements DeletionListe
     protected void onResume() {
         super.onResume();
 
-        mDbRef.child(DbManager.TODO_DATA).addValueEventListener(new ValueEventListener() {
+        // Get logged-in user to get list of to-dos added for that user
+        FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (currentUser == null) {
+            return;
+        }
+
+        mDbRef.child(currentUser.getUid()).addValueEventListener(new ValueEventListener() {
             @Override
             public void onDataChange(DataSnapshot dataSnapshot) {
                 List<TodoItem> todos = new ArrayList<>();
@@ -94,8 +106,16 @@ public class TodoListActivity extends AppCompatActivity implements DeletionListe
 
     @Override
     public void itemRemoved(int position) {
-        TodoItem todoItem = mAdapter.getItem(position);
+        final TodoItem todoItem = mAdapter.getItem(position);
         mAdapter.removeItem(position);
         DbManager.removeTodo(todoItem);
+        Snackbar.make(mRootView, todoItem.getTitle().trim() + " is deleted", Snackbar.LENGTH_LONG)
+                .setAction("UNDO", new View.OnClickListener() {
+                    @Override
+                    public void onClick(View view) {
+                        Snackbar.make(mRootView, todoItem.getTitle().trim() + " is restored!", Snackbar.LENGTH_SHORT).show();
+                    }
+                })
+                .show();
     }
 }
